@@ -51,9 +51,9 @@ const backfillStatusCopy = {
   },
   unavailable: {
     summary:
-      'Every channel the bot is allowed to read finished pulling its history, and Discord denies it the channels listed under unavailableChannelNames, so nothing from those is in the store. That is a permission somebody set, not a backfill that went wrong.',
+      'Every channel the bot is allowed to read finished pulling its history. Discord denies it the channels listed under unavailableChannelNames, so no new history arrives from them — whatever was ingested before a denial stays in the store. That is a permission somebody set, not a backfill that went wrong.',
     nextAction:
-      'Nothing to fix unless you want those channels in your catch-ups — a server admin has to give the bot View Channel and Read Message History there, and the ingest daemon tries them again the next time it connects.',
+      'Nothing to fix unless you want those channels flowing again — a server admin has to give the bot View Channel and Read Message History there, and the ingest daemon tries them again the next time it connects.',
   },
 } satisfies Record<BackfillStatus, IngestionGuidance>
 
