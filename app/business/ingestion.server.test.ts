@@ -10,6 +10,7 @@ import {
 } from '~/test/fixtures'
 import { db, describe, expect, it, vi } from '~/test/prelude'
 import type { BackfilledMessage, FetchChannelHistory } from './ingestion.common'
+import { ChannelHistoryUnavailableError } from './ingestion.common'
 import {
   backfillChannel,
   backfillIngestedChannels,
@@ -2041,27 +2042,34 @@ describe('recordMessageReactionClearing', () => {
 })
 
 async function backfillTelemetryOf(backfillRunId: string) {
-  const [completions, failures, progress] = await Promise.all([
-    db()
-      .selectFrom('backfillRunCompletions')
-      .selectAll()
-      .where('backfillRunId', '=', backfillRunId)
-      .execute(),
-    db()
-      .selectFrom('backfillRunFailures')
-      .selectAll()
-      .where('backfillRunId', '=', backfillRunId)
-      .execute(),
-    db()
-      .selectFrom('backfillRunProgress')
-      .selectAll()
-      .where('backfillRunId', '=', backfillRunId)
-      .orderBy('createdAt', 'asc')
-      .orderBy('id', 'asc')
-      .execute(),
-  ])
+  const [completions, failures, progress, unavailabilities] = await Promise.all(
+    [
+      db()
+        .selectFrom('backfillRunCompletions')
+        .selectAll()
+        .where('backfillRunId', '=', backfillRunId)
+        .execute(),
+      db()
+        .selectFrom('backfillRunFailures')
+        .selectAll()
+        .where('backfillRunId', '=', backfillRunId)
+        .execute(),
+      db()
+        .selectFrom('backfillRunProgress')
+        .selectAll()
+        .where('backfillRunId', '=', backfillRunId)
+        .orderBy('createdAt', 'asc')
+        .orderBy('id', 'asc')
+        .execute(),
+      db()
+        .selectFrom('backfillRunUnavailabilities')
+        .selectAll()
+        .where('backfillRunId', '=', backfillRunId)
+        .execute(),
+    ]
+  )
 
-  return { completions, failures, progress }
+  return { completions, failures, progress, unavailabilities }
 }
 
 describe('runChannelBackfill', () => {
@@ -2572,6 +2580,47 @@ describe('runChannelBackfill', () => {
     expect(telemetry.failures).toHaveLength(1)
     expect(telemetry.failures[0].errorMessage).toBe('Discord answered 500')
     expect(telemetry.completions).toHaveLength(0)
+  })
+
+  it('records a channel Discord will not let it read as unavailable rather than failed', async () => {
+    const guild = await createGuild()
+    const channel = await createChannel({ guildId: guild.id })
+    const fetchChannelHistory: FetchChannelHistory = async () => {
+      throw new ChannelHistoryUnavailableError('Missing Access')
+    }
+
+    const result = await fromSuccess(runChannelBackfill)(
+      { channelId: channel.id, fetchChannelHistory },
+      ownerContextFor(guild)
+    )
+
+    expect(result.outcome).toBe('channel_history_unavailable')
+
+    const telemetry = await backfillTelemetryOf(result.backfillRunId)
+
+    expect(telemetry.unavailabilities).toHaveLength(1)
+    expect(telemetry.failures).toHaveLength(0)
+    expect(telemetry.completions).toHaveLength(0)
+  })
+
+  it('keeps a channel Discord will not let it read away from the scheduler', async () => {
+    const guild = await configuredGuild()
+    const channel = await createChannel({ guildId: guild.id })
+    const fetchChannelHistory: FetchChannelHistory = async () => {
+      throw new ChannelHistoryUnavailableError('Missing Access')
+    }
+
+    await expect(
+      backfillChannel.run({ channelId: channel.id, fetchChannelHistory })
+    ).resolves.toBeUndefined()
+
+    const runs = await db()
+      .selectFrom('backfillRuns')
+      .select('id')
+      .where('channelId', '=', channel.id)
+      .execute()
+
+    expect(runs).toHaveLength(1)
   })
 
   it('records a failure, not a completion, when it stops at the page limit', async () => {
