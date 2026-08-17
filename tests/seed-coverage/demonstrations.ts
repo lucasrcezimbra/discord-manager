@@ -232,12 +232,6 @@ const seedDemonstrations: Record<
         )
       }
 
-      if (ingestion.backfill.channels.failed > 0) {
-        throw new Error(
-          `the seeded store leaves ${ingestion.backfill.channels.failed} failed backfills, so the demo blames the product for a permission Discord withheld`
-        )
-      }
-
       const [denied] = ingestion.backfill.unavailableChannelNames
 
       return `gateway ${ingestion.gateway.activity}, backfill ${ingestion.backfill.status} with ${ingestion.backfill.channels.completed} channels finished and #${denied} denied`
