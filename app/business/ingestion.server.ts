@@ -9,6 +9,7 @@ import { newId } from '~/framework/db.server'
 import { makeJob } from '~/framework/scheduler.server'
 import {
   type BackfilledMessage,
+  ChannelHistoryUnavailableError,
   type FetchChannelHistory,
   backfillPageLimit,
   backfillPageSize,
@@ -1331,6 +1332,20 @@ const runChannelBackfill = applySchema(
       }
     }
   } catch (error) {
+    if (error instanceof ChannelHistoryUnavailableError) {
+      await db()
+        .insertInto('backfillRunUnavailabilities')
+        .values({ backfillRunId: run.id, id: newId() })
+        .execute()
+
+      return {
+        backfillRunId: run.id,
+        fetchedMessageCount,
+        outcome: 'channel_history_unavailable' as const,
+        storedMessageCount,
+      }
+    }
+
     await db()
       .insertInto('backfillRunFailures')
       .values({

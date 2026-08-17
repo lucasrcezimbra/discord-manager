@@ -38,6 +38,12 @@ export interface BackfillRuns {
   id: string;
 }
 
+export interface BackfillRunUnavailabilities {
+  backfillRunId: string;
+  createdAt: Generated<string>;
+  id: string;
+}
+
 export interface BackfillRunUnreadReactions {
   backfillRunId: string;
   createdAt: Generated<string>;
@@ -411,6 +417,7 @@ export interface DB {
   backfillRunFailures: BackfillRunFailures;
   backfillRunProgress: BackfillRunProgress;
   backfillRuns: BackfillRuns;
+  backfillRunUnavailabilities: BackfillRunUnavailabilities;
   backfillRunUnreadReactions: BackfillRunUnreadReactions;
   bookmarkAdditions: BookmarkAdditions;
   bookmarkReasonAssignments: BookmarkReasonAssignments;
