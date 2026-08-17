@@ -454,14 +454,19 @@ bot ever saw. `channel_archivings` / `channel_unarchivings` carry that signal:
   It runs before the sweep is enqueued. A failed fetch degrades to the old behavior — the
   connection is still recorded, the sweep still runs, and nothing is marked archived.
 - `listBackfillableChannels` skips a channel only when its latest archived-pair event is an
-  archiving **and** a `backfill_runs` row for that channel is newer than that archiving.
+  archiving **and** a **completed** `backfill_runs` row for that channel is newer than that
+  archiving.
 
 That last rule is what keeps the change lossless. A thread that archives — whether observed
-live or discovered by reconciliation after downtime — is swept exactly once more, which is
-what collects the messages posted just before it went quiet, and drops out of every later
-sweep. A revived thread re-enters the sweep and its gap is filled. A thread that was never
-archived is always swept. At a millisecond tie the thread is swept again, which costs one
-REST call and loses nothing.
+live or discovered by reconciliation after downtime — is swept until one sweep completes,
+which is what collects the messages posted just before it went quiet, and drops out of every
+later sweep. Only a completion spends the final sweep: an attempt that Discord denied, that
+stopped on an error, or that hit the page limit still owes it, so the thread is re-attempted
+on the next reconnect exactly like a live channel — a denial heals to `unavailable` (or to
+`completed` once an admin grants access), and a long thread keeps advancing a page-limit
+stop instead of stranding its history behind a spent sweep. A revived thread re-enters the
+sweep and its gap is filled. A thread that was never archived is always swept. At a
+millisecond tie the thread is swept again, which costs one REST call and loses nothing.
 
 ### Mentions mean what Discord means
 
