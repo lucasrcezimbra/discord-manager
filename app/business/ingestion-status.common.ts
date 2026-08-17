@@ -25,7 +25,7 @@ const backfillStatusCopy = {
     summary:
       'A channel backfill stopped before it reached the newest messages, so part of the history is missing.',
     nextAction:
-      'Restart the ingest daemon with pnpm run ingest — it picks each channel listed under failedChannelNames up from the last message it stored, and prints what stopped a backfill that keeps giving up.',
+      'Restart the ingest daemon with pnpm run ingest — it picks each channel listed under failedChannelNames up from the last message it stored, and when a backfill keeps giving up on an error it prints what stopped it.',
   },
   never: {
     summary: 'No channel history has been backfilled in this server yet.',
