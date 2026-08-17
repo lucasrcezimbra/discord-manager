@@ -1421,6 +1421,11 @@ const listBackfillableChannels = applySchema(
           eb.exists(
             eb
               .selectFrom('backfillRuns')
+              .innerJoin(
+                'backfillRunCompletions',
+                'backfillRunCompletions.backfillRunId',
+                'backfillRuns.id'
+              )
               .select('backfillRuns.id')
               .whereRef('backfillRuns.channelId', '=', 'channels.id')
               .where('backfillRuns.createdAt', '>', lastArchivedAtOf(eb))
