@@ -31,6 +31,7 @@ import {
   snowflake,
 } from '~/test/fixtures'
 import { describe, expect, it } from '~/test/prelude'
+import { queryPlansWhile } from '~/test/query-plans'
 
 async function createReason(
   context: Awaited<ReturnType<typeof ownerContext>>,
@@ -597,6 +598,22 @@ describe('snoozeBookmark', () => {
 })
 
 describe('listBookmarks', () => {
+  it('reads the revisions of the messages it answers with, never every revision in the store', async () => {
+    const guild = await createGuild()
+    const channel = await createChannel({ guildId: guild.id })
+    await createBookmarkedMessage({ channelId: channel.id })
+    const context = await ownerContext({ guildId: guild.id })
+
+    const plan = await queryPlansWhile(() =>
+      fromSuccess(listBookmarks)({}, context)
+    )
+
+    expect(plan).toContainEqual(expect.stringMatching(/ message_revisions /))
+    expect(plan).not.toContainEqual(
+      expect.stringMatching(/^SCAN (message_revisions|latest_revisions)\b/)
+    )
+  })
+
   it('reads the newest content, author, channel, and jump link', async () => {
     const guild = await createGuild()
     const channel = await createChannel({ guildId: guild.id, name: 'support' })

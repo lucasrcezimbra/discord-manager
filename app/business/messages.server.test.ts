@@ -21,6 +21,7 @@ import {
   snowflake,
 } from '~/test/fixtures'
 import { describe, expect, it } from '~/test/prelude'
+import { queryPlansWhile } from '~/test/query-plans'
 
 type LiveMessage = Awaited<ReturnType<MessageFetchTransport>>
 
@@ -777,6 +778,24 @@ async function appendRevision(
 }
 
 describe('countMessages', () => {
+  it('reads the revisions of the messages it counts, never every revision in the store', async () => {
+    const { channel, context } = await countGround()
+    const needle = randomUUID()
+    await createMessage({ channelId: channel.id, content: needle })
+
+    const plan = await queryPlansWhile(() =>
+      fromSuccess(countMessages)(
+        { channelId: channel.id, contentContains: needle },
+        context
+      )
+    )
+
+    expect(plan).toContainEqual(expect.stringMatching(/ message_revisions /))
+    expect(plan).not.toContainEqual(
+      expect.stringMatching(/^SCAN (message_revisions|latest_revisions)\b/)
+    )
+  })
+
   it('counts a message once however many revisions and embeds it carries', async () => {
     const { channel, context } = await countGround()
     const needle = randomUUID()

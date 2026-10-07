@@ -606,24 +606,6 @@ const listBookmarks = applySchema(
 )(async ({ includeSnoozed, limit, reasonId }, context) => {
   if (reasonId && !(await readReason(reasonId))) throw unknownReasonError()
 
-  const rankedRevisions = db()
-    .selectFrom('messageRevisions')
-    .select((eb) => [
-      'messageId',
-      'content',
-      'id as revisionId',
-      eb.fn
-        .agg<number>('row_number')
-        .over((over) =>
-          over
-            .partitionBy('messageId')
-            .orderBy('createdAt', 'desc')
-            .orderBy('id', 'desc')
-        )
-        .as('rowNumber'),
-    ])
-    .as('latestRevisions')
-
   const rankedChannelDetails = db()
     .selectFrom('channelDetailRevisions')
     .select((eb) => [
@@ -691,7 +673,21 @@ const listBookmarks = applySchema(
     )
     .innerJoin('channels', 'channels.id', 'messages.channelId')
     .innerJoin('guilds', 'guilds.id', 'channels.guildId')
-    .innerJoin(rankedRevisions, 'latestRevisions.messageId', 'messages.id')
+    .innerJoin('messageRevisions as latestRevisions', (join) =>
+      join.on((eb) =>
+        eb(
+          'latestRevisions.id',
+          '=',
+          eb
+            .selectFrom('messageRevisions')
+            .select('messageRevisions.id')
+            .whereRef('messageRevisions.messageId', '=', 'messages.id')
+            .orderBy('messageRevisions.createdAt', 'desc')
+            .orderBy('messageRevisions.id', 'desc')
+            .limit(1)
+        )
+      )
+    )
     .innerJoin(
       rankedChannelDetails,
       'latestChannelDetails.channelId',
@@ -724,7 +720,6 @@ const listBookmarks = applySchema(
     )
     .where('latestBookmarkEvents.rowNumber', '=', 1)
     .where('latestBookmarkEvents.bookmarked', '=', 1)
-    .where('latestRevisions.rowNumber', '=', 1)
     .where('latestChannelDetails.rowNumber', '=', 1)
     .where('latestMemberDetails.rowNumber', '=', 1)
     .where('guilds.discordGuildId', '=', context.owner.guildId)
@@ -749,7 +744,7 @@ const listBookmarks = applySchema(
         .whereRef(
           'messageRevisionEmbeds.messageRevisionId',
           '=',
-          'latestRevisions.revisionId'
+          'latestRevisions.id'
         )
         .as('embeds'),
       eb
@@ -758,7 +753,7 @@ const listBookmarks = applySchema(
         .whereRef(
           'messageRevisionAttachments.messageRevisionId',
           '=',
-          'latestRevisions.revisionId'
+          'latestRevisions.id'
         )
         .as('attachments'),
       standingReactionsOfTheMessage(context.owner.discordUserId).as(

@@ -15,8 +15,28 @@ import {
   snowflake,
 } from '~/test/fixtures'
 import { describe, expect, it } from '~/test/prelude'
+import { queryPlansWhile } from '~/test/query-plans'
 
 describe('catchUpSince', () => {
+  it('reads the revisions of the messages it answers with, never every revision in the store', async () => {
+    const guild = await createGuild()
+    const channel = await createChannel({ guildId: guild.id })
+    await createMessage({
+      channelId: channel.id,
+      discordCreatedAt: '2099-01-01T00:00:00.000Z',
+    })
+    const context = await ownerContext({ guildId: guild.id })
+
+    const plan = await queryPlansWhile(() =>
+      fromSuccess(catchUpSince)({ since: '2099-01-01T00:00:00.000Z' }, context)
+    )
+
+    expect(plan).toContainEqual(expect.stringMatching(/ message_revisions /))
+    expect(plan).not.toContainEqual(
+      expect.stringMatching(/^SCAN (message_revisions|latest_revisions)\b/)
+    )
+  })
+
   it('returns every message at or after the cutoff, oldest first', async () => {
     const guild = await createGuild()
     const channel = await createChannel({ guildId: guild.id })
@@ -590,6 +610,26 @@ describe('catchUpSince', () => {
 })
 
 describe('listMentions', () => {
+  it('reads the revisions of the messages it answers with, never every revision in the store', async () => {
+    const guild = await createGuild()
+    const channel = await createChannel({ guildId: guild.id })
+    const context = await ownerContext({ guildId: guild.id })
+    await createMessage({
+      channelId: channel.id,
+      content: `<@${context.owner.discordUserId}> look`,
+      discordCreatedAt: '2099-01-01T00:00:00.000Z',
+    })
+
+    const plan = await queryPlansWhile(() =>
+      fromSuccess(listMentions)({ since: '2099-01-01T00:00:00.000Z' }, context)
+    )
+
+    expect(plan).toContainEqual(expect.stringMatching(/ message_revisions /))
+    expect(plan).not.toContainEqual(
+      expect.stringMatching(/^SCAN (message_revisions|latest_revisions)\b/)
+    )
+  })
+
   it('keeps only the messages that name the owner', async () => {
     const guild = await createGuild()
     const channel = await createChannel({ guildId: guild.id })

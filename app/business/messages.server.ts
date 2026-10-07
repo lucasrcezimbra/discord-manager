@@ -294,22 +294,6 @@ function messagesMatching({
   until: string | undefined
 }) {
   let matching = db()
-    .with('latestRevisions', (qb) =>
-      qb.selectFrom('messageRevisions').select((eb) => [
-        'messageRevisions.id',
-        'messageRevisions.messageId',
-        'messageRevisions.content',
-        eb.fn
-          .agg<number>('row_number')
-          .over((over) =>
-            over
-              .partitionBy('messageId')
-              .orderBy('createdAt', 'desc')
-              .orderBy('id', 'desc')
-          )
-          .as('rowNumber'),
-      ])
-    )
     .selectFrom('messages')
     .innerJoin('channels', 'channels.id', 'messages.channelId')
     .innerJoin('guilds', 'guilds.id', 'channels.guildId')
@@ -340,10 +324,21 @@ function messagesMatching({
     matching = matching.where((eb) =>
       eb.exists(
         eb
-          .selectFrom('latestRevisions')
+          .selectFrom('messageRevisions as latestRevisions')
           .select('latestRevisions.id')
-          .whereRef('latestRevisions.messageId', '=', 'messages.id')
-          .where('latestRevisions.rowNumber', '=', 1)
+          .where((revision) =>
+            revision(
+              'latestRevisions.id',
+              '=',
+              revision
+                .selectFrom('messageRevisions')
+                .select('messageRevisions.id')
+                .whereRef('messageRevisions.messageId', '=', 'messages.id')
+                .orderBy('messageRevisions.createdAt', 'desc')
+                .orderBy('messageRevisions.id', 'desc')
+                .limit(1)
+            )
+          )
           .where((revision) =>
             revision.or([
               carriesTheText(
