@@ -36,14 +36,16 @@ const getEnvironment = makeTypedEnv(environmentSchema, { transform: camelKeys })
 const env = () => getEnvironment(process.env)
 
 function requireEnvironment() {
-  try {
-    return env()
-  } catch {
-    console.error(
-      'Discord Manager cannot start without DISCORD_BOT_TOKEN, DISCORD_OWNER_USER_ID and DISCORD_GUILD_ID. Copy .env.example to .env and fill those three in.'
-    )
-    process.exit(1)
-  }
+  const validation = environmentSchema.safeParse(process.env)
+  if (validation.success) return env()
+
+  const fields = [
+    ...new Set(validation.error.issues.map((issue) => issue.path.join('.'))),
+  ]
+  console.error(
+    `Discord Manager configuration is invalid: ${fields.join(', ')}. Set these environment variables or correct the file passed with --config.`
+  )
+  process.exit(1)
 }
 
 export { env, environmentSchema, requireEnvironment }

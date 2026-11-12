@@ -49,7 +49,7 @@ try {
       )
     }
 
-    if (values.config) {
+    if (values.config !== undefined) {
       const configuration = parseEnv(readFileSync(values.config, 'utf8'))
       for (const [key, value] of Object.entries(configuration)) {
         process.env[key] ??= value
@@ -64,5 +64,5 @@ try {
   console.error(
     error instanceof Error ? error.message : 'Discord Manager could not start'
   )
-  process.exitCode = 1
+  process.exit(1)
 }

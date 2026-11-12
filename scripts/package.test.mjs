@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, test } from 'node:test'
@@ -48,7 +54,17 @@ before(() => {
   succeeds(packed)
   const [{ filename, files }] = JSON.parse(packed.stdout)
   assert.ok(files.some(({ path }) => path === 'dist/cli.js'))
-  assert.ok(files.some(({ path }) => path.startsWith('dist/db/migrations/')))
+  const expectedMigrations = readdirSync(join(repository, 'app/db/migrations'))
+    .filter((name) => name.endsWith('.ts'))
+    .map((name) => `dist/db/migrations/${name.replace(/\.ts$/, '.js')}`)
+    .sort()
+  assert.deepEqual(
+    files
+      .map(({ path }) => path)
+      .filter((path) => path.startsWith('dist/db/migrations/'))
+      .sort(),
+    expectedMigrations
+  )
   assert.equal(
     files.some(({ path }) => path === '.env' || path.startsWith('data/')),
     false
@@ -106,7 +122,10 @@ test('a missing explicit environment file fails without starting MCP', () => {
 test('the installed migrator finds every packaged migration from another directory', () => {
   const result = run(executable, ['migrate'])
   succeeds(result)
-  assert.match(result.stdout, /Migration .* was executed successfully/)
+  const count = readdirSync(join(repository, 'app/db/migrations')).filter(
+    (name) => name.endsWith('.ts')
+  ).length
+  assert.equal(result.stdout.match(/was executed successfully/g)?.length, count)
   succeeds(run(executable, ['migrate']))
 })
 
@@ -137,6 +156,8 @@ test('MCP loads an explicit environment file and answers a real client from anot
     name: 'installed-package-test',
     version: '1.0.0',
   })
+  const protocolErrors = []
+  client.onerror = (error) => protocolErrors.push(error.message)
   try {
     await client.connect(transport)
     const { tools } = await client.listTools()
@@ -147,9 +168,78 @@ test('MCP loads an explicit environment file and answers a real client from anot
     })
     assert.notEqual(result.isError, true)
     assert.ok(result.content.length > 0)
+    assert.deepEqual(protocolErrors, [])
+    assert.equal(client.getServerVersion().version, manifest.version)
   } finally {
     await client.close()
   }
+})
+
+test('a failed ingestion startup exits instead of leaving its timers alive', () => {
+  const result = spawnSync(executable, ['ingest'], {
+    cwd: directory,
+    env: { ...environment, DISCORD_BOT_TOKEN: 'Bot ' },
+    encoding: 'utf8',
+    timeout: 10000,
+  })
+  assert.equal(result.error, undefined)
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /token/i)
+})
+
+test('an empty explicit configuration path is refused', () => {
+  const result = run(executable, ['mcp', '--config', ''])
+  assert.equal(result.status, 1)
+  assert.equal(result.stdout, '')
+  assert.match(result.stderr, /ENOENT/)
+})
+
+test('environment values take precedence over the configuration file', () => {
+  const configuration = join(directory, 'other.env')
+  writeFileSync(
+    configuration,
+    `DATABASE_PATH=${executable}/not-a-directory.db\n`
+  )
+  const result = run(executable, ['migrate', '--config', configuration])
+  succeeds(result)
+  assert.equal(result.stdout, '')
+})
+
+test('an invalid setting names the field without disclosing its value', () => {
+  const result = run(executable, ['mcp'], directory, {
+    ...environment,
+    NODE_ENV: 'private-invalid-value',
+  })
+  assert.equal(result.status, 1)
+  assert.equal(result.stdout, '')
+  assert.match(result.stderr, /NODE_ENV/)
+  assert.equal(result.stderr.includes('private-invalid-value'), false)
+})
+
+test('a Git dependency prepares its executable and native database dependency', () => {
+  const revision = run('git', ['rev-parse', 'HEAD'], repository)
+  succeeds(revision)
+  const installed = join(directory, 'git-install')
+  const spec = `git+file://${repository}#${revision.stdout.trim()}`
+  succeeds(
+    run('npm', [
+      'install',
+      '--prefix',
+      installed,
+      '--omit=dev',
+      '--no-audit',
+      '--no-fund',
+      spec,
+    ])
+  )
+  const cli = join(installed, 'node_modules/.bin/discord-manager')
+  succeeds(run(cli, ['--help']))
+  const migrated = run(cli, ['migrate'], directory, {
+    ...environment,
+    DATABASE_PATH: join(installed, 'store.db'),
+  })
+  succeeds(migrated)
+  assert.match(migrated.stdout, /was executed successfully/)
 })
 
 test('MCP reports missing credentials on stderr without writing protocol noise', () => {

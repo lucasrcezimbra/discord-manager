@@ -12,8 +12,9 @@ import { type Result, serializeError } from 'composable-functions'
 import { z } from 'zod'
 import { ownerContext } from '~/business/auth.server'
 import { registeredTools } from '~/mcp/registry.server'
+import packageMetadata from '../../package.json'
 
-const serverInfo = { name: 'discord-manager', version: '0.1.0' }
+const serverInfo = { name: 'discord-manager', version: packageMetadata.version }
 
 function listTools(): Tool[] {
   return registeredTools.map(({ description, inputSchema, name }) => ({

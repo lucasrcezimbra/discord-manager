@@ -85,7 +85,7 @@ Then just talk: *"What did I miss since this morning?"* — *"Bookmark that as s
 
 The package provides `discord-manager mcp`, `discord-manager ingest`, and `discord-manager migrate`. It builds its JavaScript during installation, so an installed copy needs neither a source checkout nor pnpm. Node.js 22.12+ and npm are required; `better-sqlite3` can also need the build tools described above.
 
-Keep credentials in a private file outside the installed package. Set `DATABASE_PATH` to an absolute path so every command uses the same store, regardless of its working directory. `--config` reads that file; values already set in the environment take precedence. Without this option, the existing `.env` in the working directory still works.
+Keep credentials in a private file outside the installed package. Set `DATABASE_PATH` to an absolute path so every command uses the same store, regardless of its working directory. `--config` reads that file; values already set in the environment take precedence. The `.env` in the working directory fills any values still missing.
 
 Replace `COMMIT` with the full commit you want to install:
 
