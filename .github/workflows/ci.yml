@@ -37,6 +37,8 @@ jobs:
         run: pnpm run tsc
       - name: Run unit tests
         run: pnpm run test:unit
+      - name: Test the installed production package
+        run: pnpm run test:package
       - name: Prove the dev seed can demonstrate every tool
         run: pnpm run test:seed-coverage
 
